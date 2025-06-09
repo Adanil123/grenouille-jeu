@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Jeu Grenouille 3D</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #87ceeb; }
+    canvas { display: block; }
+    #score, #timer {
+      position: absolute;
+      top: 10px;
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+      color: white;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 12px;
+      border-radius: 10px;
+      z-index: 2;
+    }
+    #score { left: 10px; }
+    #timer { right: 10px; }
+  </style>
+</head>
+<body>
+<div id="score">Score : 0</div>
+<div id="timer">Temps restant : 60s</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+<script>
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x87ceeb, 10, 50);
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
+  camera.position.set(0, 5, 10);
+
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 20, 10);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x404040));
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshLambertMaterial({color: 0x228822}));
+  ground.rotation.x = - Math.PI / 2;
+  scene.add(ground);
+
+  // Grenouille
+  const frog = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.7, 1), new THREE.MeshLambertMaterial({color: 0x2e8b57}));
+  body.position.y = 0.35;
+  frog.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.35), new THREE.MeshLambertMaterial({color: 0x2e8b57}));
+  head.position.set(0, 0.8, 0.5);
+  frog.add(head);
+
+  // Yeux
+  const eyeWhite = new THREE.MeshLambertMaterial({color: 0xffffff});
+  const eyeBlack = new THREE.MeshLambertMaterial({color: 0x000000});
+
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.1), eyeWhite);
+  eyeL.position.set(-0.3, 0.9, 0.7);
+  frog.add(eyeL);
+
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.1), eyeWhite);
+  eyeR.position.set(0.3, 0.9, 0.7);
+  frog.add(eyeR);
+
+  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.05), eyeBlack);
+  pupilL.position.set(-0.3, 0.9, 0.78);
+  frog.add(pupilL);
+
+  const pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.05), eyeBlack);
+  pupilR.position.set(0.3, 0.9, 0.78);
+  frog.add(pupilR);
+
+  scene.add(frog);
+
+  const keys = {};
+  window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+  window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Mouches
+  const flies = [];
+  const flyGeo = new THREE.SphereGeometry(0.2);
+  const flyMat = new THREE.MeshLambertMaterial({color: 0x000000});
+  function spawnFly() {
+    const fly = new THREE.Mesh(flyGeo, flyMat);
+    fly.position.set((Math.random()-0.5)*40, 0.2, (Math.random()-0.5)*40);
+    scene.add(fly);
+    flies.push(fly);
+  }
+  for (let i = 0; i < 10; i++) spawnFly();
+
+  let score = 0;
+  let timeLeft = 60;
+  let gameOver = false;
+  const scoreEl = document.getElementById("score");
+  const timerEl = document.getElementById("timer");
+
+  function updateTimer() {
+    if (!gameOver && timeLeft > 0) {
+      timeLeft--;
+      timerEl.textContent = "Temps restant : " + timeLeft + "s";
+    } else if (!gameOver) {
+      gameOver = true;
+      timerEl.textContent = "Temps écoulé ! Score final : " + score;
+    }
+  }
+  setInterval(updateTimer, 1000);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    if (gameOver) return;
+
+    let dx = 0, dz = 0;
+    if (keys["z"] || keys["arrowup"]) dz -= 0.1;
+    if (keys["s"] || keys["arrowdown"]) dz += 0.1;
+    if (keys["q"] || keys["arrowleft"]) dx -= 0.1;
+    if (keys["d"] || keys["arrowright"]) dx += 0.1;
+
+    if (dx !== 0 || dz !== 0) {
+      frog.position.x += dx;
+      frog.position.z += dz;
+      frog.rotation.y = Math.atan2(dx, dz);
+    }
+
+    camera.position.lerp(new THREE.Vector3(
+      frog.position.x,
+      frog.position.y + 2,
+      frog.position.z + 5
+    ), 0.1);
+    camera.lookAt(frog.position);
+
+    for (let i = flies.length - 1; i >= 0; i--) {
+      const fly = flies[i];
+      const dist = frog.position.distanceTo(fly.position);
+      if (dist < 1) {
+        scene.remove(fly);
+        flies.splice(i, 1);
+        score++;
+        scoreEl.textContent = "Score : " + score;
+        spawnFly();
+      }
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+</script>
+</body>
+</html>
